@@ -1,16 +1,106 @@
 import json
-
 import re
+import ipaddress
+import socket
 
 from pathlib import Path
-
 from urllib.parse import urlparse, urljoin
 
-
-
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+# ============================================================
+# Public URL security validation
+# ============================================================
+
+BLOCKED_HOSTNAMES = {
+    "localhost",
+    "localhost.localdomain",
+    "metadata.google.internal",
+    "metadata",
+}
+
+BLOCKED_IPS = {
+    ipaddress.ip_address("169.254.169.254"),
+    ipaddress.ip_address("100.100.100.200"),
+}
 
 
+def validate_public_url(url):
+    """
+    Validate that a target URL is suitable for public
+    server-side browser analysis.
+
+    Blocks localhost, private/reserved/link-local addresses,
+    loopback addresses, and cloud metadata endpoints.
+    """
+
+    parsed = urlparse(url)
+
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(
+            "Only HTTP and HTTPS URLs are supported."
+        )
+
+    hostname = parsed.hostname
+
+    if not hostname:
+        raise ValueError("Invalid URL.")
+
+    hostname = hostname.rstrip(".").lower()
+
+    if hostname in BLOCKED_HOSTNAMES:
+        raise ValueError(
+            "Private or local destinations are not allowed."
+        )
+
+    # Direct IP address
+    try:
+        ip = ipaddress.ip_address(hostname)
+
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip in BLOCKED_IPS
+        ):
+            raise ValueError(
+                "Private or reserved IP addresses are not allowed."
+            )
+
+        return
+    except ValueError:
+        # Not an IP address; continue with DNS validation.
+        pass
+
+    # Resolve hostname and check every returned address.
+    try:
+        addresses = socket.getaddrinfo(
+            hostname,
+            None,
+            type=socket.SOCK_STREAM
+        )
+    except socket.gaierror:
+    # DNS resolution failure is not itself evidence of a
+    # private destination. Let Playwright handle the failure.
+       return
+
+    for address in addresses:
+        resolved_ip = ipaddress.ip_address(
+            address[4][0]
+        )
+
+        if (
+            resolved_ip.is_private
+            or resolved_ip.is_loopback
+            or resolved_ip.is_link_local
+            or resolved_ip.is_multicast
+            or resolved_ip.is_reserved
+            or resolved_ip in BLOCKED_IPS
+        ):
+            raise ValueError(
+                "The target resolves to a private or reserved IP address."
+            )
 
 
 
@@ -328,31 +418,11 @@ def calculate_obfuscation_features(url):
 
 def extract_features(url):
 
+    url = url.strip()
 
+    validate_public_url(url)
 
     parsed = urlparse(url)
-
-
-
-    if parsed.scheme not in ("http", "https"):
-
-        raise ValueError(
-
-            "Only HTTP and HTTPS URLs are supported."
-
-        )
-
-
-
-    if not parsed.netloc:
-
-        raise ValueError(
-
-            "Invalid URL."
-
-        )
-
-
 
     original_domain = parsed.netloc.lower()
 
@@ -568,15 +638,24 @@ def extract_features(url):
 
             )
 
+            # ------------------------------------------------
+            # Security: block private/internal browser requests
+            # ------------------------------------------------
 
+            def handle_route(route):
+                try:
+                    validate_public_url(route.request.url)
+                    route.continue_()
+                except ValueError:
+                    route.abort()
+
+            page.route("**/*", handle_route)
 
             # ------------------------------------------------
 
             # Request monitoring
 
             # ------------------------------------------------
-
-
 
             def handle_request(request):
 
@@ -717,9 +796,7 @@ def extract_features(url):
                 handle_request
 
             )
-
-
-
+        
             page.on(
 
                 "requestfailed",
