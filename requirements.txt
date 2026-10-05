@@ -1,0 +1,11 @@
+pandas>=2.2
+numpy>=1.26
+scikit-learn>=1.5
+xgboost>=2.1
+matplotlib>=3.9
+seaborn>=0.13
+joblib>=1.4
+ucimlrepo>=0.0.7
+shap>=0.46
+playwright
+streamlit

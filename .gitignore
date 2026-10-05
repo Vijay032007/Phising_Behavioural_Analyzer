@@ -1,0 +1,23 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.git/
+.env
+.env.*
+.streamlit/secrets.toml
+*.log
+
+# Training datasets - not required by deployed app
+data/raw/
+data/processed/
+
+# Generated reports - created at runtime
+reports/
+
+# Other training model artifacts - not required by deployed app
+models/best_model.joblib
+models/behavioral_best_model.joblib
+models/behavioral_model_metadata.json
+models/final_behavioral_model_metadata.json
+models/model_metadata.json
