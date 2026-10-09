@@ -168,15 +168,33 @@ if analyze:
 
             model, feature_columns = load_model()
 
+
             # ------------------------------------------------
             # Website behavioral analysis
             # ------------------------------------------------
 
-            with st.spinner(
-                "Analyzing website behavior... Please wait."
-            ):
+            url = url.strip()
 
-                result = extract_features(url)
+            if url and not url.startswith(("http://", "https://")):
+                url = "https://" + url
+
+            try:
+                with st.spinner(
+                    "Analyzing website behavior... Please wait."
+                ):
+                    result = extract_features(url)
+
+            except ValueError as e:
+                st.error(f"Unable to analyze URL: {e}")
+                st.stop()
+
+            except Exception:
+                st.error(
+                    "Unable to analyze this website. "
+                    "Please check the URL and try again."
+                )
+                st.stop()
+
 
             # ------------------------------------------------
             # Build ML feature vector
